@@ -1,3 +1,7 @@
 {
-    "tpp": "Transferring Pension Provider"
+  "tpp": {
+    "acro": "Transferring Pension Provider",
+    "definition": "The pension provider that is transferring the pension value.",
+    "backgroundColor": "rgba(255, 255, 0, 0.3)"
+  }
 }
