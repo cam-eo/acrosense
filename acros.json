@@ -1,7 +1,13 @@
 {
   "tpp": {
     "acro": "Transferring Pension Provider",
+    "definition": "The pension provider that is transferring the pension value."
+  },
+  "rpp": {
+    "acro": "Requesting Pension Provider",
     "definition": "The pension provider that is transferring the pension value.",
-    "backgroundColor": "rgba(255, 255, 0, 0.3)"
-  }
+    "backgroundColor": "#32123402"
+  },
+  "bg": "rgba(255, 255, 0, 0.3)"
 }
+

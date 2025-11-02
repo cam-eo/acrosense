@@ -2,6 +2,8 @@
 
 ## Prerequisites
 
+Will just include these in initial setup
+
 - [Node.js](https://nodejs.org/) (v20 or later)
 - [pnpm](https://pnpm.io/) package manager
 - VS Code with the following extensions:
@@ -17,7 +19,8 @@
    pnpm install
    ```
 
-2. The extension is configured to auto-activate on startup (`onStartupFinished`)
+2. Install the extension [esbuild Problem Matcher](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint)
+3. The extension is configured to auto-activate on startup (`onStartupFinished`)
 
 ## Running the Extension
 

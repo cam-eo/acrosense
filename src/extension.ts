@@ -7,33 +7,106 @@ import * as path from "path";
 interface AcronymDefinition {
   acro: string;
   definition: string;
-  backgroundColor: string;
+  backgroundColor?: string;
+  bg?: string;
+}
+
+type ConfigType = "json" | "js" | "ts" | "folder";
+
+interface ConfigInfo {
+  type: ConfigType;
+  path: string;
+  directory: string;
+}
+
+interface ConfigCacheEntry {
+  data: { [key: string]: any };
+  mtime: number;
 }
 
 let acroDefinitions: { [key: string]: AcronymDefinition } = {};
 const decorationTypes: vscode.TextEditorDecorationType[] = [];
 let highlightTimeout: NodeJS.Timeout | undefined;
+let configReloadTimeout: NodeJS.Timeout | undefined;
+const configCache: Map<string, ConfigCacheEntry> = new Map();
 
 /**
- * Find acros.json file by searching:
+ * Check for configuration conflicts at a given directory level
+ */
+function checkConfigurationConflict(dir: string): string[] {
+  const conflicts: string[] = [];
+  const configs: { type: ConfigType; path: string }[] = [];
+
+  const jsonPath = path.join(dir, "acros.json");
+  const jsPath = path.join(dir, "acros.js");
+  const tsPath = path.join(dir, "acros.ts");
+  const folderPath = path.join(dir, "acros");
+
+  if (fs.existsSync(jsonPath)) {
+    configs.push({ type: "json", path: jsonPath });
+  }
+  if (fs.existsSync(jsPath)) {
+    configs.push({ type: "js", path: jsPath });
+  }
+  if (fs.existsSync(tsPath)) {
+    configs.push({ type: "ts", path: tsPath });
+  }
+  if (fs.existsSync(folderPath) && fs.statSync(folderPath).isDirectory()) {
+    configs.push({ type: "folder", path: folderPath });
+  }
+
+  if (configs.length > 1) {
+    const types = configs.map((c) => c.type).join(", ");
+    conflicts.push(`Multiple configurations found at ${dir}: ${types}`);
+  }
+
+  return conflicts;
+}
+
+/**
+ * Find acros configuration by searching:
  * 1. All workspace folders
  * 2. Document's directory and parent directories up to workspace root
+ * Supports: acros.json, acros.js, acros.ts, or acros/ folder
  */
-function findAcrosJson(documentUri?: vscode.Uri): string | undefined {
-  // First, try all workspace folders
+function findAcrosConfig(documentUri?: vscode.Uri): ConfigInfo | undefined {
   const workspaceFolders = vscode.workspace.workspaceFolders || [];
   console.log(
-    `[AcroSense] Searching for acros.json in ${workspaceFolders.length} workspace folder(s)`
+    `[AcroSense] Searching for acros configuration in ${workspaceFolders.length} workspace folder(s)`
   );
 
+  // First, try all workspace folders
   for (const folder of workspaceFolders) {
-    const filePath = path.join(folder.uri.fsPath, "acros.json");
-    console.log(`[AcroSense] Checking workspace folder: ${filePath}`);
-    if (fs.existsSync(filePath)) {
-      console.log(
-        `[AcroSense] Found acros.json in workspace folder: ${filePath}`
-      );
-      return filePath;
+    const dir = folder.uri.fsPath;
+    const conflicts = checkConfigurationConflict(dir);
+    if (conflicts.length > 0) {
+      const message = `AcroSense: Configuration conflict - ${conflicts.join("; ")}. Please remove all but one.`;
+      vscode.window.showWarningMessage(message);
+      console.warn(`[AcroSense] ⚠️ ${message}`);
+      return undefined;
+    }
+
+    // Check in priority order
+    const jsonPath = path.join(dir, "acros.json");
+    const jsPath = path.join(dir, "acros.js");
+    const tsPath = path.join(dir, "acros.ts");
+    const folderPath = path.join(dir, "acros");
+
+    if (fs.existsSync(folderPath) && fs.statSync(folderPath).isDirectory()) {
+      console.log(`[AcroSense] Found acros/ folder: ${folderPath}`);
+      return { type: "folder", path: folderPath, directory: dir };
+    }
+    if (fs.existsSync(jsonPath)) {
+      console.log(`[AcroSense] Found acros.json: ${jsonPath}`);
+      return { type: "json", path: jsonPath, directory: dir };
+    }
+    if (fs.existsSync(jsPath)) {
+      console.log(`[AcroSense] Found acros.js: ${jsPath}`);
+      return { type: "js", path: jsPath, directory: dir };
+    }
+    if (fs.existsSync(tsPath)) {
+      console.log(`[AcroSense] Found acros.ts: ${tsPath}`);
+      return { type: "ts", path: tsPath, directory: dir };
     }
   }
 
@@ -55,11 +128,35 @@ function findAcrosJson(documentUri?: vscode.Uri): string | undefined {
         break;
       }
 
-      const filePath = path.join(currentDir, "acros.json");
-      console.log(`[AcroSense] Checking directory: ${filePath}`);
-      if (fs.existsSync(filePath)) {
-        console.log(`[AcroSense] Found acros.json: ${filePath}`);
-        return filePath;
+      const conflicts = checkConfigurationConflict(currentDir);
+      if (conflicts.length > 0) {
+        const message = `AcroSense: Configuration conflict - ${conflicts.join("; ")}. Please remove all but one.`;
+        vscode.window.showWarningMessage(message);
+        console.warn(`[AcroSense] ⚠️ ${message}`);
+        return undefined;
+      }
+
+      // Check in priority order
+      const folderPath = path.join(currentDir, "acros");
+      const jsonPath = path.join(currentDir, "acros.json");
+      const jsPath = path.join(currentDir, "acros.js");
+      const tsPath = path.join(currentDir, "acros.ts");
+
+      if (fs.existsSync(folderPath) && fs.statSync(folderPath).isDirectory()) {
+        console.log(`[AcroSense] Found acros/ folder: ${folderPath}`);
+        return { type: "folder", path: folderPath, directory: currentDir };
+      }
+      if (fs.existsSync(jsonPath)) {
+        console.log(`[AcroSense] Found acros.json: ${jsonPath}`);
+        return { type: "json", path: jsonPath, directory: currentDir };
+      }
+      if (fs.existsSync(jsPath)) {
+        console.log(`[AcroSense] Found acros.js: ${jsPath}`);
+        return { type: "js", path: jsPath, directory: currentDir };
+      }
+      if (fs.existsSync(tsPath)) {
+        console.log(`[AcroSense] Found acros.ts: ${tsPath}`);
+        return { type: "ts", path: tsPath, directory: currentDir };
       }
 
       // Move up one directory
@@ -67,36 +164,293 @@ function findAcrosJson(documentUri?: vscode.Uri): string | undefined {
     }
   }
 
-  console.log(`[AcroSense] No acros.json found`);
+  console.log(`[AcroSense] No acros configuration found`);
   return undefined;
 }
 
-function loadAcronyms(documentUri?: vscode.Uri) {
-  const acronymFilePath = findAcrosJson(documentUri);
+// Track if ts-node has been registered
+let tsNodeRegistered = false;
 
-  if (acronymFilePath) {
+/**
+ * Load a JavaScript or TypeScript module and extract exported object
+ */
+function loadModule(filePath: string): any {
+  try {
+    // Check cache first
+    const stats = fs.statSync(filePath);
+    const cacheKey = filePath;
+    const cached = configCache.get(cacheKey);
+    if (cached && cached.mtime === stats.mtimeMs) {
+      return cached.data;
+    }
+
+    let moduleExports: any;
+
+    if (filePath.endsWith(".ts")) {
+      // Try to load TypeScript file with ts-node
+      if (!tsNodeRegistered) {
+        try {
+          // Try to find ts-node
+          require.resolve("ts-node");
+          // Register ts-node
+          require("ts-node").register({
+            transpileOnly: true,
+            compilerOptions: { module: "commonjs", esModuleInterop: true },
+          });
+          tsNodeRegistered = true;
+          console.log("[AcroSense] ts-node registered for TypeScript support");
+        } catch (e) {
+          const errorMsg = `AcroSense: TypeScript support requires 'ts-node'. Install it with: npm install ts-node (or compile acros.ts to acros.js)`;
+          vscode.window.showErrorMessage(errorMsg);
+          console.error(`[AcroSense] ❌ ${errorMsg}`);
+          throw new Error(errorMsg);
+        }
+      }
+    }
+
+    // Remove from require cache to ensure fresh load
+    // Use try-catch in case module hasn't been loaded yet
     try {
-      const data = fs.readFileSync(acronymFilePath, "utf8");
-      const parsed = JSON.parse(data);
-      acroDefinitions = parsed;
-      const acronymKeys = Object.keys(parsed);
+      const resolvedPath = require.resolve(filePath);
+      if (resolvedPath in require.cache) {
+        delete require.cache[resolvedPath];
+      }
+    } catch (e) {
+      // Module not in cache yet or not resolvable, that's fine
+    }
+
+    // Try to require the module
+    // For TypeScript files, ts-node will handle resolution
+    let resolvedPath = filePath;
+    try {
+      resolvedPath = require.resolve(filePath);
+    } catch (e) {
+      // If resolution fails (e.g., for .ts files), use the original path
+      resolvedPath = filePath;
+    }
+    
+    const module = require(resolvedPath);
+
+    // Handle different export formats
+    if (module.default && typeof module.default === "object") {
+      // ES module default export
+      moduleExports = module.default;
+    } else if (typeof module === "object" && module.exports !== undefined && typeof module.exports === "object") {
+      // CommonJS module.exports = {...}
+      moduleExports = module.exports;
+    } else if (typeof module === "object") {
+      // The module itself is the export (CommonJS style)
+      moduleExports = module;
+    } else {
+      // Try to merge all named exports
+      const keys = Object.keys(module).filter((k) => k !== "default" && k !== "exports");
+      if (keys.length > 0) {
+        moduleExports = {};
+        for (const key of keys) {
+          if (typeof module[key] === "object" && module[key] !== null) {
+            Object.assign(moduleExports, module[key]);
+          }
+        }
+        if (Object.keys(moduleExports).length === 0) {
+          throw new Error("No valid export found. Use 'export default', 'module.exports', or named exports.");
+        }
+      } else {
+        throw new Error("No valid export found. Use 'export default', 'module.exports', or named exports.");
+      }
+    }
+
+    // Cache the result
+    configCache.set(cacheKey, { data: moduleExports, mtime: stats.mtimeMs });
+
+    return moduleExports;
+  } catch (error: any) {
+    const errorMsg = `Failed to load module ${filePath}: ${error.message}`;
+    console.error(`[AcroSense] ❌ ${errorMsg}`, error);
+    throw error;
+  }
+}
+
+/**
+ * Load acronyms from a folder containing multiple files
+ */
+function loadFromAcrosFolder(folderPath: string): { [key: string]: any } {
+  const merged: { [key: string]: any } = {};
+  const duplicateKeys: Set<string> = new Set();
+  let defaultBg: string | undefined;
+
+  try {
+    const files = fs.readdirSync(folderPath);
+    const fileInfos: { path: string; name: string }[] = [];
+
+    // Collect all relevant files
+    for (const file of files) {
+      const filePath = path.join(folderPath, file);
+      const stat = fs.statSync(filePath);
+      if (stat.isFile()) {
+        if (file.endsWith(".json") || file.endsWith(".js") || file.endsWith(".ts")) {
+          fileInfos.push({ path: filePath, name: file });
+        }
+      }
+    }
+
+    // Sort alphabetically for consistent merging order
+    fileInfos.sort((a, b) => a.name.localeCompare(b.name));
+
+    for (const fileInfo of fileInfos) {
+      try {
+        let data: any;
+
+        if (fileInfo.path.endsWith(".json")) {
+          // Load JSON file
+          const stats = fs.statSync(fileInfo.path);
+          const cacheKey = fileInfo.path;
+          const cached = configCache.get(cacheKey);
+          if (cached && cached.mtime === stats.mtimeMs) {
+            data = cached.data;
+          } else {
+            const content = fs.readFileSync(fileInfo.path, "utf8");
+            data = JSON.parse(content);
+            configCache.set(cacheKey, { data, mtime: stats.mtimeMs });
+          }
+        } else {
+          // Load JS or TS file
+          data = loadModule(fileInfo.path);
+        }
+
+        if (data && typeof data === "object") {
+          // Extract default bg/backgroundColor from first file only
+          if (defaultBg === undefined && (data.bg || data.backgroundColor)) {
+            defaultBg = data.bg || data.backgroundColor;
+          }
+
+          // Merge data, tracking duplicates
+          for (const key of Object.keys(data)) {
+            if (key === "bg" || key === "backgroundColor") {
+              // Skip root-level bg/backgroundColor when merging from folder
+              // We'll use the first one found as the default
+              continue;
+            }
+            if (key in merged && !duplicateKeys.has(key)) {
+              duplicateKeys.add(key);
+              console.warn(
+                `[AcroSense] ⚠️ Duplicate key '${key}' found in ${fileInfo.name}. Later file will override.`
+              );
+            }
+            merged[key] = data[key];
+          }
+        }
+      } catch (error: any) {
+        console.error(
+          `[AcroSense] ❌ Failed to load ${fileInfo.name}: ${error.message}. Continuing with other files.`
+        );
+        // Continue loading other files
+      }
+    }
+
+    // Apply default bg if found
+    if (defaultBg !== undefined) {
+      merged.bg = defaultBg;
+    }
+
+    if (duplicateKeys.size > 0) {
+      console.warn(
+        `[AcroSense] ⚠️ Found ${duplicateKeys.size} duplicate key(s) in acros/ folder: ${Array.from(duplicateKeys).join(", ")}`
+      );
+    }
+  } catch (error: any) {
+    console.error(`[AcroSense] ❌ Failed to read acros/ folder: ${error.message}`);
+    throw error;
+  }
+
+  return merged;
+}
+
+/**
+ * Load acronyms from a single file (JSON, JS, or TS)
+ */
+function loadFromAcrosFile(filePath: string): { [key: string]: any } {
+  if (filePath.endsWith(".json")) {
+    const stats = fs.statSync(filePath);
+    const cacheKey = filePath;
+    const cached = configCache.get(cacheKey);
+    if (cached && cached.mtime === stats.mtimeMs) {
+      return cached.data;
+    }
+    const content = fs.readFileSync(filePath, "utf8");
+    const data = JSON.parse(content);
+    configCache.set(cacheKey, { data, mtime: stats.mtimeMs });
+    return data;
+  } else {
+    return loadModule(filePath);
+  }
+}
+
+/**
+ * Normalize acronym definitions:
+ * 1. Extract root-level bg/backgroundColor as default
+ * 2. Apply default to acronyms without their own color
+ * 3. Normalize bg/backgroundColor keys to backgroundColor
+ */
+function normalizeAcronyms(raw: { [key: string]: any }): {
+  [key: string]: AcronymDefinition;
+} {
+  const normalized: { [key: string]: AcronymDefinition } = {};
+  const defaultColor = raw.bg || raw.backgroundColor || "rgba(255, 255, 0, 0.3)";
+
+  for (const [key, value] of Object.entries(raw)) {
+    // Skip special keys
+    if (key === "bg" || key === "backgroundColor") {
+      continue;
+    }
+
+    if (value && typeof value === "object" && value.acro && value.definition) {
+      // Normalize bg/backgroundColor to backgroundColor
+      const backgroundColor =
+        value.bg || value.backgroundColor || defaultColor;
+
+      normalized[key.toLowerCase()] = {
+        acro: value.acro,
+        definition: value.definition,
+        backgroundColor,
+      };
+    }
+  }
+
+  return normalized;
+}
+
+function loadAcronyms(documentUri?: vscode.Uri) {
+  const configInfo = findAcrosConfig(documentUri);
+
+  if (configInfo) {
+    try {
+      let rawData: { [key: string]: any };
+
+      if (configInfo.type === "folder") {
+        rawData = loadFromAcrosFolder(configInfo.path);
+      } else {
+        rawData = loadFromAcrosFile(configInfo.path);
+      }
+
+      acroDefinitions = normalizeAcronyms(rawData);
+      const acronymKeys = Object.keys(acroDefinitions);
       console.log(
-        `[AcroSense] ✅ Loaded ${acronymKeys.length} acronym(s) from: ${acronymFilePath}`
+        `[AcroSense] ✅ Loaded ${acronymKeys.length} acronym(s) from: ${configInfo.path}`
       );
       console.log(`[AcroSense] Loaded acronyms: ${acronymKeys.join(", ")}`);
-    } catch (error) {
-      const errorMessage = `Failed to load acros.json from ${acronymFilePath}: ${error}`;
+    } catch (error: any) {
+      const errorMessage = `Failed to load configuration from ${configInfo.path}: ${error.message}`;
       vscode.window.showErrorMessage(errorMessage);
       console.error(`[AcroSense] ❌ ${errorMessage}`, error);
     }
   } else {
-    // Only show warning if we have workspace folders but no acros.json found
+    // Only show warning if we have workspace folders but no config found
     if (
       vscode.workspace.workspaceFolders &&
       vscode.workspace.workspaceFolders.length > 0
     ) {
       console.warn(
-        "[AcroSense] ⚠️ No acros.json found in workspace folders or document directory"
+        "[AcroSense] ⚠️ No acros configuration found in workspace folders or document directory"
       );
     }
   }
@@ -105,31 +459,38 @@ function loadAcronyms(documentUri?: vscode.Uri) {
 function getAcronymsForDocument(document: vscode.TextDocument): {
   [key: string]: AcronymDefinition;
 } {
-  // Reload acronyms for this specific document to get the right acros.json
+  // Reload acronyms for this specific document to get the right config
   const documentDefs: { [key: string]: AcronymDefinition } = {};
-  const acronymFilePath = findAcrosJson(document.uri);
+  const configInfo = findAcrosConfig(document.uri);
 
-  if (acronymFilePath) {
+  if (configInfo) {
     try {
-      const data = fs.readFileSync(acronymFilePath, "utf8");
-      const parsed = JSON.parse(data);
-      Object.assign(documentDefs, parsed);
+      let rawData: { [key: string]: any };
+
+      if (configInfo.type === "folder") {
+        rawData = loadFromAcrosFolder(configInfo.path);
+      } else {
+        rawData = loadFromAcrosFile(configInfo.path);
+      }
+
+      const normalized = normalizeAcronyms(rawData);
+      Object.assign(documentDefs, normalized);
       console.log(
         `[AcroSense] Loaded acronyms for ${document.fileName}: ${Object.keys(
           documentDefs
         ).join(", ")}`
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error(
-        `[AcroSense] ❌ Failed to parse acros.json for ${document.fileName}:`,
+        `[AcroSense] ❌ Failed to parse configuration for ${document.fileName}:`,
         error
       );
       vscode.window.showErrorMessage(
-        `AcroSense: Invalid JSON in acros.json - ${error}`
+        `AcroSense: Invalid configuration - ${error.message}`
       );
     }
   } else {
-    console.log(`[AcroSense] No acros.json found for ${document.fileName}`);
+    console.log(`[AcroSense] No acros configuration found for ${document.fileName}`);
   }
 
   // Fall back to global definitions if no document-specific ones found
@@ -177,12 +538,43 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(hoverProvider);
 
-  // Watch for file changes in acros.json and reload acronyms
+  // Watch for file changes in config files and reload acronyms
   vscode.workspace.onDidSaveTextDocument((document) => {
-    if (document.uri.fsPath.endsWith("acros.json")) {
-      // Reload from the saved file's location
-      loadAcronyms(document.uri);
-      highlightAcronyms(); // Reapply highlights
+    const filePath = document.uri.fsPath;
+    const fileName = path.basename(filePath);
+    const dirName = path.basename(path.dirname(filePath));
+
+    // Check if it's a config file
+    if (
+      fileName === "acros.json" ||
+      fileName === "acros.js" ||
+      fileName === "acros.ts" ||
+      (dirName === "acros" && (fileName.endsWith(".json") || fileName.endsWith(".js") || fileName.endsWith(".ts")))
+    ) {
+      // Invalidate cache for this file
+      configCache.delete(filePath);
+
+      // Invalidate require cache if it's a JS/TS file
+      if (fileName.endsWith(".js") || fileName.endsWith(".ts")) {
+        try {
+          const resolvedPath = require.resolve(filePath);
+          if (resolvedPath in require.cache) {
+            delete require.cache[resolvedPath];
+          }
+        } catch (e) {
+          // File not in require cache, that's fine
+        }
+      }
+
+      // Debounce reloads (300ms)
+      if (configReloadTimeout) {
+        clearTimeout(configReloadTimeout);
+      }
+      configReloadTimeout = setTimeout(() => {
+        // Reload from the saved file's location
+        loadAcronyms(document.uri);
+        highlightAcronyms(); // Reapply highlights
+      }, 300);
     }
   });
 
@@ -294,8 +686,13 @@ export function deactivate() {
   // Clean up decoration types
   decorationTypes.forEach((type) => type.dispose());
   decorationTypes.length = 0;
-  // Clear any pending highlight timeout
+  // Clear any pending timeouts
   if (highlightTimeout) {
     clearTimeout(highlightTimeout);
   }
+  if (configReloadTimeout) {
+    clearTimeout(configReloadTimeout);
+  }
+  // Clear cache
+  configCache.clear();
 }
