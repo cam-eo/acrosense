@@ -6,7 +6,7 @@ import * as path from "path";
 
 interface AcronymDefinition {
   acro: string;
-  definition: string;
+  definition?: string;
   backgroundColor?: string;
   bg?: string;
 }
@@ -390,6 +390,7 @@ function loadFromAcrosFile(filePath: string): { [key: string]: any } {
  * 1. Extract root-level bg/backgroundColor as default
  * 2. Apply default to acronyms without their own color
  * 3. Normalize bg/backgroundColor keys to backgroundColor
+ * 4. Support both object format and simple string format
  */
 function normalizeAcronyms(raw: { [key: string]: any }): {
   [key: string]: AcronymDefinition;
@@ -403,14 +404,24 @@ function normalizeAcronyms(raw: { [key: string]: any }): {
       continue;
     }
 
-    if (value && typeof value === "object" && value.acro && value.definition) {
+    // Support simple string format: "pp": "Pension Provider"
+    if (typeof value === "string") {
+      normalized[key.toLowerCase()] = {
+        acro: value,
+        backgroundColor: defaultColor,
+      };
+      continue;
+    }
+
+    // Support object format: "pp": { "acro": "Pension Provider", ... }
+    if (value && typeof value === "object" && value.acro) {
       // Normalize bg/backgroundColor to backgroundColor
       const backgroundColor =
         value.bg || value.backgroundColor || defaultColor;
 
       normalized[key.toLowerCase()] = {
         acro: value.acro,
-        definition: value.definition,
+        definition: value.definition, // Optional
         backgroundColor,
       };
     }
@@ -521,17 +532,55 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      const word = document.getText(wordRange);
+      const identifier = document.getText(wordRange);
+      const identifierLower = identifier.toLowerCase();
+      
       // Get acronyms specific to this document's location
       const docAcronyms = getAcronymsForDocument(document);
-      const acronymDef = docAcronyms[word.toLowerCase()];
+      
+      // Get cursor position within the identifier
+      const cursorOffset = position.character - wordRange.start.character;
+      
+      // Find all acronyms that match within this identifier at the cursor position
+      const matchingAcronyms: AcronymDefinition[] = [];
+      
+      for (const [acronymKey, acronymDef] of Object.entries(docAcronyms)) {
+        const acronymLower = acronymKey.toLowerCase();
+        
+        // Find all occurrences of this acronym within the identifier
+        let searchStart = 0;
+        while (true) {
+          const index = identifierLower.indexOf(acronymLower, searchStart);
+          if (index === -1) {
+            break;
+          }
+          
+          const acronymStart = index;
+          const acronymEnd = index + acronymKey.length;
+          
+          // Check if cursor is within this acronym match
+          if (cursorOffset >= acronymStart && cursorOffset < acronymEnd) {
+            matchingAcronyms.push(acronymDef);
+            break; // Found a match, no need to check other occurrences of same acronym
+          }
+          
+          searchStart = index + 1;
+        }
+      }
 
-      if (acronymDef) {
-        return new vscode.Hover(
-          new vscode.MarkdownString(
-            `**${acronymDef.acro}**: ${acronymDef.definition}`
-          )
-        );
+      if (matchingAcronyms.length > 0) {
+        // Stack all matching definitions vertically
+        const hoverContent = matchingAcronyms
+          .map((def) => {
+            if (def.definition) {
+              return `**${def.acro}**: ${def.definition}`;
+            } else {
+              return `**${def.acro}**`;
+            }
+          })
+          .join("\n\n");
+        
+        return new vscode.Hover(new vscode.MarkdownString(hoverContent));
       }
     },
   });
@@ -635,7 +684,8 @@ function highlightAcronyms() {
     );
 
     const text = editor.document.getText();
-    const regex = /\b(\w{2,})\b/g;
+    // Find all identifiers (words) in the code
+    const identifierRegex = /\b\w+\b/g;
 
     // Group decorations by background color
     const decorationsByColor: { [color: string]: vscode.DecorationOptions[] } =
@@ -643,23 +693,41 @@ function highlightAcronyms() {
     let foundCount = 0;
 
     let match;
-    while ((match = regex.exec(text)) !== null) {
-      const acronym = match[1].toLowerCase();
-      const acronymDef = docAcronyms[acronym];
-      if (acronymDef) {
-        foundCount++;
-        const startPos = editor.document.positionAt(match.index);
-        const endPos = editor.document.positionAt(
-          match.index + match[0].length
-        );
-        const range = new vscode.Range(startPos, endPos);
-        const decoration = { range };
+    while ((match = identifierRegex.exec(text)) !== null) {
+      const identifier = match[0];
+      const identifierStart = match.index;
+      const identifierLower = identifier.toLowerCase();
 
-        const color = acronymDef.backgroundColor ?? "rgba(255, 255, 0, 0.3)";
-        if (!decorationsByColor[color]) {
-          decorationsByColor[color] = [];
+      // Search for all acronyms within this identifier
+      for (const [acronymKey, acronymDef] of Object.entries(docAcronyms)) {
+        const acronymLower = acronymKey.toLowerCase();
+        
+        // Find all occurrences of this acronym within the identifier
+        let searchStart = 0;
+        while (true) {
+          const index = identifierLower.indexOf(acronymLower, searchStart);
+          if (index === -1) {
+            break;
+          }
+
+          foundCount++;
+          const acronymStart = identifierStart + index;
+          const acronymEnd = acronymStart + acronymKey.length;
+          
+          const startPos = editor.document.positionAt(acronymStart);
+          const endPos = editor.document.positionAt(acronymEnd);
+          const range = new vscode.Range(startPos, endPos);
+          const decoration = { range };
+
+          const color = acronymDef.backgroundColor ?? "rgba(255, 255, 0, 0.3)";
+          if (!decorationsByColor[color]) {
+            decorationsByColor[color] = [];
+          }
+          decorationsByColor[color].push(decoration);
+
+          // Move search start past this match
+          searchStart = index + 1;
         }
-        decorationsByColor[color].push(decoration);
       }
     }
 
