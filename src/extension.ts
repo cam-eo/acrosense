@@ -542,7 +542,8 @@ export function activate(context: vscode.ExtensionContext) {
       const cursorOffset = position.character - wordRange.start.character;
       
       // Find all acronyms that match within this identifier at the cursor position
-      const matchingAcronyms: AcronymDefinition[] = [];
+      // Store both the definition and the matched text
+      const matchingAcronyms: { def: AcronymDefinition; matchedText: string }[] = [];
       
       for (const [acronymKey, acronymDef] of Object.entries(docAcronyms)) {
         const acronymLower = acronymKey.toLowerCase();
@@ -560,7 +561,9 @@ export function activate(context: vscode.ExtensionContext) {
           
           // Check if cursor is within this acronym match
           if (cursorOffset >= acronymStart && cursorOffset < acronymEnd) {
-            matchingAcronyms.push(acronymDef);
+            // Capture the actual matched text from the identifier (preserving case)
+            const matchedText = identifier.substring(acronymStart, acronymEnd);
+            matchingAcronyms.push({ def: acronymDef, matchedText });
             break; // Found a match, no need to check other occurrences of same acronym
           }
           
@@ -570,12 +573,15 @@ export function activate(context: vscode.ExtensionContext) {
 
       if (matchingAcronyms.length > 0) {
         // Stack all matching definitions vertically
+        // Show matched text in parentheses only when there are multiple matches (stacked)
+        const isStacked = matchingAcronyms.length > 1;
         const hoverContent = matchingAcronyms
-          .map((def) => {
+          .map(({ def, matchedText }) => {
+            const displayText = isStacked ? `**${def.acro}** (${matchedText})` : `**${def.acro}**`;
             if (def.definition) {
-              return `**${def.acro}**: ${def.definition}`;
+              return `${displayText}: ${def.definition}`;
             } else {
-              return `**${def.acro}**`;
+              return displayText;
             }
           })
           .join("\n\n");
