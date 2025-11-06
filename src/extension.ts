@@ -1,5 +1,3 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
@@ -573,11 +571,10 @@ export function activate(context: vscode.ExtensionContext) {
 
       if (matchingAcronyms.length > 0) {
         // Stack all matching definitions vertically
-        // Show matched text in parentheses only when there are multiple matches (stacked)
-        const isStacked = matchingAcronyms.length > 1;
+        // Show matched text next to the acronym
         const hoverContent = matchingAcronyms
           .map(({ def, matchedText }) => {
-            const displayText = isStacked ? `**${def.acro}** (${matchedText})` : `**${def.acro}**`;
+            const displayText = `**${def.acro}** \`${matchedText}\``;
             if (def.definition) {
               return `${displayText}: ${def.definition}`;
             } else {
