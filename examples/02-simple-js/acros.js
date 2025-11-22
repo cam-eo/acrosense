@@ -8,11 +8,10 @@ module.exports = {
   wc: "Worst Case",
   ui: "User Interface",
   ux: "User Experience",
-  
+
   // You can also use object format in JavaScript
   rest: {
     acro: "Representational State Transfer",
-    definition: "An architectural style for designing web services"
-  }
+    definition: "An architectural style for designing web services",
+  },
 };
-
