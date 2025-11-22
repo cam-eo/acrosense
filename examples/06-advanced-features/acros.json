@@ -1,0 +1,31 @@
+{
+  "bg": "rgba(255, 255, 0, 0.3)",
+  
+  "api": {
+    "acro": "Application Programming Interface",
+    "definition": "A set of protocols, routines, and tools for building software applications. APIs define how different software components should interact.",
+    "backgroundColor": "rgba(100, 200, 255, 0.3)"
+  },
+  
+  "rest": {
+    "acro": "Representational State Transfer",
+    "definition": "An architectural style for designing web services. RESTful APIs use HTTP methods and are stateless.",
+    "backgroundColor": "rgba(150, 255, 150, 0.3)"
+  },
+  
+  "graphql": {
+    "acro": "Graph Query Language",
+    "definition": "A query language and runtime for APIs. GraphQL allows clients to request exactly the data they need.",
+    "backgroundColor": "rgba(255, 200, 100, 0.3)"
+  },
+  
+  "e2e": "End-to-End",
+  
+  "ui": {
+    "acro": "User Interface",
+    "backgroundColor": "rgba(255, 150, 200, 0.3)"
+  },
+  
+  "ux": "User Experience"
+}
+

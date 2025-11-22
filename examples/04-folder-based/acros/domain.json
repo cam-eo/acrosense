@@ -1,0 +1,12 @@
+{
+  "rest": {
+    "acro": "Representational State Transfer",
+    "definition": "An architectural style for designing web services"
+  },
+  "graphql": {
+    "acro": "Graph Query Language",
+    "definition": "A query language and runtime for APIs"
+  },
+  "orm": "Object-Relational Mapping"
+}
+

@@ -1,99 +1,76 @@
-# AcroSense Development Guide
+# 🛠️ AcroSense Developer Guide
 
-## Prerequisites
+This guide helps contributors, maintainers, and curious developers get started quickly.
 
-Will just include these in initial setup
+## 📦 Prerequisites
 
-- [Node.js](https://nodejs.org/) (v20 or later)
-- [pnpm](https://pnpm.io/) package manager
-- VS Code with the following extensions:
-  - `esbuild Problem Matchers` (connor4312.esbuild-problem-matchers)
-  - `Extension Test Runner` (ms-vscode.extension-test-runner) - for running tests
-  - `ESLint` (dbaeumer.vscode-eslint) - recommended
+- Node.js + pnpm  
+- VS Code  
+- `vsce` (for packaging)  
+- Git  
 
-## Initial Setup
+## 🏗 Project Structure
 
-1. Install dependencies:
+```
+acrosense/
+ ├─ src/
+ │   └─ extension.ts
+ ├─ dist/
+ ├─ package.json
+ ├─ acros.json (example)
+ └─ README.md
+```
 
+## ▶️ Run the Extension Locally
+
+1. Install deps:  
    ```bash
    pnpm install
    ```
 
-2. Install the extension [esbuild Problem Matcher](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint)
-3. The extension is configured to auto-activate on startup (`onStartupFinished`)
-
-## Running the Extension
-
-### Development/Debugging
-
-1. **Press F5** to launch the Extension Development Host
-
-   - This automatically runs the `watch` task (compiles TypeScript and bundles with esbuild)
-   - Opens a new VS Code window (Extension Development Host) with your extension loaded
-   - Watch mode automatically rebuilds on file changes
-
-2. **In the Extension Development Host window:**
-   - Create or open a folder with an `acros.json` file
-   - Open any file containing acronyms defined in `acros.json`
-   - Acronyms should be highlighted and show definitions on hover
-
-### Debug Console
-
-Check the Debug Console (View → Debug Console) for extension logs:
-
-- `[AcroSense] Extension activated!` - confirms extension loaded
-- `[AcroSense] Searching for acros.json...` - file discovery logs
-- `[AcroSense] ✅ Loaded X acronym(s)...` - successful acronym loading
-- Error messages if `acros.json` is invalid or can't be found
-
-## Available Scripts
-
-- `pnpm run compile` - Type check, lint, and build once
-- `pnpm run watch` - Watch mode: runs `watch:esbuild` and `watch:tsc` in parallel
-- `pnpm run package` - Production build (for publishing)
-- `pnpm run check-types` - Type check only
-- `pnpm run lint` - Run ESLint
-- `pnpm run test` - Run tests (requires `watch-tests` to be running)
-- `pnpm run watch-tests` - Watch and compile tests
-
-## Testing Your Extension
-
-### Manual Testing
-
-1. In the Extension Development Host window, create or open a folder
-2. Create `acros.json` in the folder root:
-   ```json
-   {
-     "tpp": {
-       "acro": "Transferring Pension Provider",
-       "definition": "The pension provider that is transferring the pension value.",
-       "backgroundColor": "rgba(255, 255, 0, 0.3)"
-     }
-   }
+2. Start dev mode with auto‑build:  
+   ```bash
+   pnpm run watch
    ```
-3. Create a test file (e.g., `test.js`) and type acronyms like `tpp`
-4. You should see:
-   - Yellow highlighting on `tpp`
-   - Hover tooltip showing the full acronym and definition
 
-### Running Tests
+3. Press **F5** in VS Code to launch the *Extension Development Host*.
 
-1. Start test watcher: `Cmd+Shift+P` → "Tasks: Run Task" → `watch-tests`
-2. Open Testing view and click "Run Test" or press `Cmd+; A`
+4. Open any project inside the Dev Host window and test acronym hover.
 
-## How It Works
+## 🧪 Testing
 
-- **File Discovery**: Extension searches for `acros.json` in:
-  - All workspace folders
-  - Document's directory and parent directories (up to workspace root)
-- **Hover Provider**: Registered for all file types (`*`)
-- **Highlighting**: Automatically highlights acronyms with custom background colors
-- **Auto-reload**: Watches for `acros.json` file changes and reloads acronyms
+Compile tests:
+```bash
+pnpm run compile-tests
+```
 
-## Troubleshooting
+Run them:
+```bash
+pnpm test
+```
 
-- **No logs in Debug Console?** Make sure activation events are set (`onStartupFinished` in `package.json`)
-- **Can't find acros.json?** Check Debug Console for search logs. Ensure file is in workspace root or document's directory tree
-- **JSON parse errors?** Verify `acros.json` is valid JSON. Check for incomplete values like `"rgba(255, 255, 0, 0."`
-- **Highlights not showing?** Check Debug Console for acronym loading messages. Ensure acronym keys match exactly (case-insensitive)
-- **F5 shows task picker?** Select "npm: watch" - VS Code will remember your choice
+## 🚀 Publishing
+
+1. Login:  
+   ```bash
+   vsce login <publisher>
+   ```
+
+2. Package:  
+   ```bash
+   vsce package
+   ```
+
+3. Publish:  
+   ```bash
+   vsce publish
+   ```
+
+## 📥 Contribution Workflow
+
+1. Fork the repo  
+2. Create a feature branch  
+3. Run `pnpm run watch` to develop  
+4. Submit a PR with a screenshot of your change  
+
+Thanks for contributing ❤️

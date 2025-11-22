@@ -1,0 +1,7 @@
+{
+  "orm": "Object-Relational Mapping",
+  "dto": "Data Transfer Object",
+  "repo": "Repository",
+  "svc": "Service"
+}
+
